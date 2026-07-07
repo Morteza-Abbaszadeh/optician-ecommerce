@@ -1,261 +1,200 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { useCartStore } from "@/store/useCartStore"
-import { useAuthStore } from "@/store/useAuthStore"
-import { apiClient } from "@/services/apiClient"
-import { orderService } from "@/services/orderService"
+import { apiClient } from "@/services/apiClient" // یا "@/services/apiClient" بسته به مسیر فایل شما
 import { Button } from "@/components/ui/button"
-import { MapPin, Plus, CheckCircle2, Loader2, ArrowRight, Wallet } from "lucide-react"
-
-// تایپ اسکریپت برای مدل آدرس
-interface Address {
-  id: string
-  title: string
-  full_address: string
-  postal_code: string
-  phone_number: string
-  is_default: boolean
-}
+import { Input } from "@/components/ui/input"
+import { MapPin, Phone, User, CheckCircle, Loader2, ArrowRight } from "lucide-react"
+import Link from "next/link"
 
 export default function CheckoutPage() {
   const router = useRouter()
+  const [isClient, setIsClient] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState("")
+
   const { items, getTotalPrice, clearCart } = useCartStore()
-  const { isAuthenticated } = useAuthStore()
 
-  const [addresses, setAddresses] = useState<Address[]>([])
-  const [selectedAddressId, setSelectedAddressId] = useState<string>("")
-  const [isLoadingAddresses, setIsLoadingAddresses] = useState(true)
-  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false)
-  const [showAddForm, setShowAddForm] = useState(false)
-
-  // استیت‌های فرم افزودن آدرس
-  const [newAddress, setNewAddress] = useState({
-    title: "",
-    full_address: "",
-    postal_code: "",
+  const [formData, setFormData] = useState({
+    full_name: "",
     phone_number: "",
-    is_default: true
+    state: "",
+    city: "",
+    address: "",
+    postal_code: "",
   })
 
-  // هدایت کاربر در صورت خالی بودن سبد خرید یا لاگین نبودن
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push("/login?redirect=/checkout")
-      return
-    }
-    if (items.length === 0) {
-      router.push("/cart")
-      return
-    }
-    fetchAddresses()
-  }, [isAuthenticated, items])
+    setIsClient(true)
+  }, [])
 
-  // دریافت آدرس‌ها از سرور
-  const fetchAddresses = async () => {
-    try {
-      setIsLoadingAddresses(true)
-      const res = await apiClient.get("/users/addresses")
-      setAddresses(res.data)
-      if (res.data.length > 0) {
-        // انتخاب خودکار آدرس پیش‌فرض یا اولین آدرس
-        const defaultAddr = res.data.find((a: Address) => a.is_default) || res.data[0]
-        setSelectedAddressId(defaultAddr.id)
-      } else {
-        setShowAddForm(true) // اگر آدرسی نداشت، مستقیماً فرم را باز کن
-      }
-    } catch (error) {
-      console.error("خطا در دریافت آدرس‌ها", error)
-    } finally {
-      setIsLoadingAddresses(false)
-    }
+  if (!isClient) return <div className="min-h-screen bg-zinc-50 flex justify-center items-center"><Loader2 className="w-8 h-8 animate-spin text-zinc-400" /></div>
+
+  if (items.length === 0) {
+    return (
+      <div className="min-h-screen bg-zinc-50 flex flex-col justify-center items-center pb-20">
+        <h2 className="text-xl font-bold text-zinc-700 mb-4">سبد خرید شما خالی است</h2>
+        <Link href="/cart">
+          <Button variant="outline" className="rounded-xl">بازگشت به سبد خرید</Button>
+        </Link>
+      </div>
+    )
   }
 
-  // ثبت آدرس جدید در دیتابیس
-  const handleAddAddress = async (e: React.FormEvent) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value })
+  }
+
+  const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault()
-    try {
-      const res = await apiClient.post("/users/addresses", newAddress)
-      setAddresses([res.data, ...addresses]) // اضافه کردن به بالای لیست
-      setSelectedAddressId(res.data.id) // انتخاب خودکار آن
-      setShowAddForm(false) // بستن فرم
-      setNewAddress({ title: "", full_address: "", postal_code: "", phone_number: "", is_default: true })
-    } catch (error) {
-      alert("خطا در ثبت آدرس جدید.")
-    }
-  }
-
-  // ثبت نهایی سفارش
-  const handlePlaceOrder = async () => {
-    if (!selectedAddressId) {
-      alert("لطفاً یک آدرس برای ارسال انتخاب کنید.")
-      return
-    }
-
-    // پیدا کردن اطلاعات کامل آدرس انتخاب شده
-    const address = addresses.find(a => a.id === selectedAddressId)
-    const formattedShippingAddress = `${address?.title} - ${address?.full_address} (تلفن: ${address?.phone_number}, کد پستی: ${address?.postal_code || "ندارد"})`
+    setIsSubmitting(true)
+    setError("")
 
     try {
-      setIsSubmittingOrder(true)
-      
-      const orderPayload = {
-        items: items.map(item => ({
-          variant_id: item.variantId,
-          quantity: item.quantity
-        })),
-        shipping_address: formattedShippingAddress
+      // ۱. تبدیل آدرس به یک رشته یکپارچه (یا ارسال به صورت فیلدهای مجزا بسته به بک‌اند)
+      const fullShippingAddress = `${formData.state}، ${formData.city}، ${formData.address} - کد پستی: ${formData.postal_code}`
+
+      // ۲. آماده‌سازی آیتم‌ها دقیقا مطابق با اسکمای بک‌اند (OrderItemCreate)
+      const orderItems = items.map(item => ({
+        variant_id: item.variantId,
+        quantity: item.quantity,
+        // اینجا اطلاعات پزشکی مستقیماً به بک‌اند پاس داده می‌شود!
+        prescription: item.prescription || null 
+      }))
+
+      // ۳. ساخت پِی‌لود نهایی سفارش
+      const payload = {
+        shipping_address: fullShippingAddress,
+        phone_number: formData.phone_number,
+        full_name: formData.full_name,
+        items: orderItems
       }
 
-      await orderService.createOrder(orderPayload)
-      clearCart()
-      alert("پرداخت موفقیت‌آمیز بود! سفارش شما ثبت شد 🎉")
-      router.push("/profile") // در آینده می‌توانیم آن را به صفحه success ببریم
+      // ۴. ارسال به بک‌اند
+      await apiClient.post("/orders/", payload)
+
+      // ۵. عملیات موفقیت‌آمیز
+      clearCart() // خالی کردن سبد خرید محلی
+      router.push("/cart/success") // انتقال به صفحه تشکر و موفقیت
 
     } catch (err: any) {
-      alert(err.response?.data?.detail || "خطایی در ثبت سفارش رخ داد.")
+      console.error(err)
+      setError(err.response?.data?.detail || "خطایی در ثبت سفارش رخ داد. لطفاً دوباره تلاش کنید.")
     } finally {
-      setIsSubmittingOrder(false)
+      setIsSubmitting(false)
     }
-  }
-
-  const totalPrice = getTotalPrice()
-  const shippingCost = 50000
-  const finalPrice = totalPrice + shippingCost
-
-  if (isLoadingAddresses) {
-    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-zinc-900" /></div>
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans pb-24" dir="rtl">
-      <div className="max-w-[1200px] mx-auto px-4 py-12">
+    <div className="min-h-screen bg-zinc-50 pb-24 font-sans" dir="rtl">
+      <div className="max-w-[1200px] mx-auto px-4 py-8 md:py-12">
         
-        <div className="flex items-center gap-3 mb-8">
-          <MapPin className="w-8 h-8 text-zinc-900" />
-          <h1 className="text-3xl font-black text-zinc-900">تکمیل اطلاعات ارسال</h1>
+        <div className="flex items-center gap-4 mb-8">
+          <Link href="/cart">
+            <Button variant="outline" size="icon" className="rounded-xl"><ArrowRight className="w-5 h-5" /></Button>
+          </Link>
+          <h1 className="text-3xl font-black text-zinc-900">تکمیل اطلاعات سفارش</h1>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-8">
-          
-          {/* ستون سمت راست: انتخاب یا ثبت آدرس */}
-          <div className="w-full lg:w-2/3 space-y-6">
-            
-            <div className="bg-white p-6 md:p-8 rounded-3xl border border-zinc-100 shadow-sm">
-              <div className="flex items-center justify-between mb-6 border-b border-zinc-100 pb-4">
-                <h2 className="text-xl font-bold text-zinc-800">آدرس گیرنده</h2>
-                {!showAddForm && (
-                  <Button variant="outline" onClick={() => setShowAddForm(true)} className="gap-2 text-sm font-bold border-zinc-200">
-                    <Plus className="w-4 h-4" /> آدرس جدید
-                  </Button>
-                )}
-              </div>
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-2xl font-bold">
+            {error}
+          </div>
+        )}
 
-              {/* فرم افزودن آدرس جدید */}
-              {showAddForm ? (
-                <form onSubmit={handleAddAddress} className="space-y-4 animate-in fade-in slide-in-from-top-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-bold text-zinc-700">عنوان آدرس (مثلاً: خانه) *</label>
-                      <input required value={newAddress.title} onChange={e => setNewAddress({...newAddress, title: e.target.value})} className="w-full p-3 border rounded-xl bg-zinc-50 outline-none focus:border-zinc-400" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-bold text-zinc-700">شماره تماس تحویل گیرنده *</label>
-                      <input required type="tel" value={newAddress.phone_number} onChange={e => setNewAddress({...newAddress, phone_number: e.target.value})} className="w-full p-3 border rounded-xl bg-zinc-50 outline-none focus:border-zinc-400" dir="ltr" />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-sm font-bold text-zinc-700">آدرس دقیق پستی *</label>
-                      <textarea required value={newAddress.full_address} onChange={e => setNewAddress({...newAddress, full_address: e.target.value})} className="w-full p-3 border rounded-xl bg-zinc-50 outline-none focus:border-zinc-400 min-h-[100px]" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-bold text-zinc-700">کد پستی (اختیاری)</label>
-                      <input value={newAddress.postal_code} onChange={e => setNewAddress({...newAddress, postal_code: e.target.value})} className="w-full p-3 border rounded-xl bg-zinc-50 outline-none focus:border-zinc-400" dir="ltr" />
-                    </div>
-                  </div>
-                  <div className="flex gap-3 pt-4">
-                    <Button type="submit" className="bg-zinc-900 text-white hover:bg-zinc-800 rounded-xl px-8 font-bold">ثبت آدرس</Button>
-                    {addresses.length > 0 && (
-                      <Button type="button" variant="outline" onClick={() => setShowAddForm(false)} className="rounded-xl font-bold">انصراف</Button>
-                    )}
-                  </div>
-                </form>
-              ) : (
-                /* لیست آدرس‌های قبلی */
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {addresses.map((addr) => (
-                    <div 
-                      key={addr.id}
-                      onClick={() => setSelectedAddressId(addr.id)}
-                      className={`relative p-5 rounded-2xl border-2 cursor-pointer transition-all duration-200 
-                        ${selectedAddressId === addr.id 
-                          ? 'border-zinc-900 bg-zinc-50' 
-                          : 'border-zinc-100 bg-white hover:border-zinc-200'}`}
-                    >
-                      {selectedAddressId === addr.id && (
-                        <CheckCircle2 className="absolute top-4 left-4 w-6 h-6 text-zinc-900" />
-                      )}
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-bold text-zinc-900 text-lg">{addr.title}</span>
-                        {addr.is_default && <span className="text-[10px] bg-zinc-200 text-zinc-700 px-2 py-0.5 rounded-full font-bold">پیش‌فرض</span>}
-                      </div>
-                      <p className="text-sm text-zinc-600 mb-4 line-clamp-2 leading-relaxed">{addr.full_address}</p>
-                      <div className="text-xs text-zinc-500 font-medium font-mono" dir="ltr">{addr.phone_number}</div>
-                    </div>
-                  ))}
+        <form onSubmit={handleSubmitOrder} className="flex flex-col lg:flex-row gap-8">
+          
+          {/* ستون راست: فرم اطلاعات گیرنده */}
+          <div className="w-full lg:w-2/3 space-y-6">
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
+              <h2 className="text-xl font-bold text-zinc-800 flex items-center gap-2 border-b border-zinc-100 pb-4">
+                <MapPin className="w-5 h-5 text-emerald-500" /> آدرس و مشخصات گیرنده
+              </h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-zinc-700 flex items-center gap-1"><User className="w-4 h-4"/> نام و نام خانوادگی تحویل گیرنده</label>
+                  <Input required name="full_name" value={formData.full_name} onChange={handleChange} className="h-12 bg-zinc-50 border-zinc-200" placeholder="مثال: علی رضایی" />
                 </div>
-              )}
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-zinc-700 flex items-center gap-1"><Phone className="w-4 h-4"/> شماره تماس</label>
+                  <Input required name="phone_number" value={formData.phone_number} onChange={handleChange} className="h-12 bg-zinc-50 border-zinc-200" placeholder="0912..." dir="ltr" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-zinc-700">استان</label>
+                  <Input required name="state" value={formData.state} onChange={handleChange} className="h-12 bg-zinc-50 border-zinc-200" placeholder="تهران" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-zinc-700">شهر</label>
+                  <Input required name="city" value={formData.city} onChange={handleChange} className="h-12 bg-zinc-50 border-zinc-200" placeholder="تهران" />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-sm font-bold text-zinc-700">آدرس دقیق</label>
+                  <textarea required name="address" value={formData.address} onChange={handleChange} className="w-full p-4 border rounded-2xl bg-zinc-50 border-zinc-200 outline-none min-h-[100px]" placeholder="خیابان، کوچه، پلاک، واحد..."></textarea>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-sm font-bold text-zinc-700">کد پستی (۱۰ رقمی)</label>
+                  <Input required name="postal_code" value={formData.postal_code} onChange={handleChange} className="h-12 bg-zinc-50 border-zinc-200" placeholder="1234567890" dir="ltr" />
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* ستون سمت چپ: فاکتور و پرداخت */}
+          {/* ستون چپ: خلاصه سفارش و دکمه پرداخت */}
           <div className="w-full lg:w-1/3">
-            <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-xl shadow-zinc-100/50 sticky top-28">
-              <h3 className="text-lg font-black text-zinc-900 mb-6 border-b border-zinc-100 pb-4">مبلغ قابل پرداخت</h3>
+            <div className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm sticky top-24">
+              <h3 className="text-lg font-black text-zinc-900 mb-4">آیتم‌های سفارش</h3>
               
-              <div className="space-y-4 mb-6">
-                <div className="flex justify-between items-center text-zinc-600">
-                  <span>مبلغ کالاها ({items.length} عدد)</span>
-                  <span className="font-bold text-zinc-900">{new Intl.NumberFormat("fa-IR").format(totalPrice)} تومان</span>
-                </div>
-                <div className="flex justify-between items-center text-zinc-600">
-                  <span>هزینه ارسال</span>
-                  <span className="font-bold text-zinc-900">{new Intl.NumberFormat("fa-IR").format(shippingCost)} تومان</span>
-                </div>
+              <div className="space-y-4 mb-6 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin">
+                {items.map(item => (
+                  <div key={item.cartItemId} className="flex gap-3 items-center border-b border-zinc-50 pb-4">
+                    <div className="relative w-16 h-16 bg-zinc-50 rounded-xl overflow-hidden shrink-0 border border-zinc-100">
+                      <Image src={item.image} alt={item.title} fill className="object-cover p-1" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-bold text-zinc-800 line-clamp-1">{item.title}</h4>
+                      <p className="text-xs text-zinc-500 mt-1">{item.colorName} | تعداد: {item.quantity}</p>
+                      {item.prescription && <p className="text-[10px] font-bold text-blue-600 mt-1 bg-blue-50 inline-block px-1 rounded">نسخه پزشکی دارد</p>}
+                    </div>
+                  </div>
+                ))}
               </div>
 
-              <div className="border-t border-zinc-100 pt-6 mb-8">
-                <div className="flex justify-between items-center">
-                  <span className="text-base font-bold text-zinc-900">جمع کل نهایی</span>
-                  <span className="text-2xl font-black text-emerald-600 text-left">
-                    {new Intl.NumberFormat("fa-IR").format(finalPrice)} <span className="text-sm font-medium text-emerald-600 block -mt-1">تومان</span>
+              <div className="border-t border-zinc-100 pt-6 mb-6 space-y-3">
+                <div className="flex justify-between items-center text-zinc-600 font-medium text-sm">
+                  <span>هزینه کالاها:</span>
+                  <span>{new Intl.NumberFormat("fa-IR").format(getTotalPrice())} تومان</span>
+                </div>
+                <div className="flex justify-between items-center text-zinc-600 font-medium text-sm">
+                  <span>هزینه ارسال:</span>
+                  <span className="text-emerald-600">رایگان</span>
+                </div>
+                <div className="flex justify-between items-end pt-3">
+                  <span className="font-bold text-zinc-800">مبلغ قابل پرداخت:</span>
+                  <span className="text-2xl font-black text-zinc-900">
+                    {new Intl.NumberFormat("fa-IR").format(getTotalPrice())} <span className="text-xs font-medium text-zinc-500">تومان</span>
                   </span>
                 </div>
               </div>
 
               <Button 
-                onClick={handlePlaceOrder}
-                disabled={isSubmittingOrder || !selectedAddressId || showAddForm}
-                size="lg" 
-                className={`w-full h-14 text-lg font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all duration-200 
-                  ${(isSubmittingOrder || !selectedAddressId || showAddForm) ? 'bg-zinc-200 text-zinc-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98]'}`}
+                type="submit" 
+                disabled={isSubmitting} 
+                className="w-full h-16 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl text-lg font-black shadow-lg shadow-zinc-900/20 transition-all hover:-translate-y-1 flex items-center justify-center gap-2"
               >
-                {isSubmittingOrder ? (
-                  <>
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                    در حال اتصال به درگاه...
-                  </>
+                {isSubmitting ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
                 ) : (
-                  <>
-                    پرداخت نهایی و ثبت سفارش
-                    <Wallet className="w-5 h-5" />
-                  </>
+                  <>ثبت سفارش و پرداخت <CheckCircle className="w-5 h-5" /></>
                 )}
               </Button>
             </div>
           </div>
 
-        </div>
+        </form>
       </div>
     </div>
   )

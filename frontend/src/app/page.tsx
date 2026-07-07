@@ -1,13 +1,18 @@
-"use client"
-
-import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, MapPin, Camera, ChevronLeft } from "lucide-react"
 import { homeService } from "@/services/homeService"
-import { apiClient } from "@/services/apiClient"
+import { productService } from "@/services/productService"
 
+// ==========================================
+// جادوی ISR در Next.js (نسخه App Router)
+// ==========================================
+// با این خط، Next.js کل این صفحه را به صورت یک فایل HTML استاتیک روی سرور ذخیره می‌کند
+// و هر ۳۶۰۰ ثانیه (یک ساعت) یک‌بار، در پس‌زمینه (بدون اینکه کاربر متوجه شود) 
+// دیتا را از بک‌اند می‌گیرد و HTML جدید را جایگزین قبلی می‌کند.
+export const revalidate = 3600 
+// ==========================================
 
 // دیتای پیش‌فرض در صورتی که دیتابیس هنوز خالی باشد
 const defaultSections = [
@@ -17,27 +22,19 @@ const defaultSections = [
   { id: 4, section_type: "SOCIAL_LOCATION", title: "گالری و شبکه اجتماعی" }
 ]
 
-export default function HomePage() {
-  const [sections, setSections] = useState<any[]>([])
-
-  useEffect(() => {
-    // گرفتن دیتا از بک‌اند
-    homeService.getHomeLayout().then(data => {
-      // اگر دیتابیس خالی بود، دیتای پیش‌فرض را نشان بده تا صفحه خالی نماند
-      if (!data || data.length === 0) {
-        setSections(defaultSections)
-      } else {
-        setSections(data)
-      }
-    }).catch(() => {
-      // در صورت خطای شبکه هم دیتای پیش‌فرض لود شود
-      setSections(defaultSections)
-    })
-  }, [])
+export default async function HomePage() {
+  let sections = []
+  
+  try {
+    const data = await homeService.getHomeLayout()
+    sections = !data || data.length === 0 ? defaultSections : data
+  } catch (error) {
+    sections = defaultSections
+  }
 
   return (
     <main className="min-h-screen bg-zinc-50 font-sans pb-20" dir="rtl">
-      {sections.map((section) => {
+      {sections.map((section: any) => {
         switch (section.section_type) {
           case "HERO":
             return <HeroSection key={section.id} data={section} />
@@ -55,16 +52,10 @@ export default function HomePage() {
   )
 }
 
-// ==========================================
-// کامپوننت‌های زیرمجموعه صفحه اصلی
-// ==========================================
 function HeroSection({ data }: { data: any }) {
   return (
     <section className="w-full max-w-[1400px] mx-auto p-4 animate-in fade-in duration-700">
-      {/* یک گرید دو ستونه تمیز فقط برای تصاویر */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[400px] md:h-[550px]">
-        
-        {/* کالکشن زنانه */}
         <Link href="/shop?gender=women" className="relative rounded-3xl overflow-hidden group cursor-pointer h-full block">
           <Image 
             src="https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=1000&auto=format&fit=crop" 
@@ -81,7 +72,6 @@ function HeroSection({ data }: { data: any }) {
           </div>
         </Link>
 
-        {/* کالکشن مردانه */}
         <Link href="/shop?gender=men" className="relative rounded-3xl overflow-hidden group cursor-pointer h-full block">
           <Image 
             src="https://images.unsplash.com/photo-1614715838608-dd527c46231d?q=80&w=1000&auto=format&fit=crop" 
@@ -97,28 +87,22 @@ function HeroSection({ data }: { data: any }) {
             </span>
           </div>
         </Link>
-
       </div>
     </section>
   )
 }
 
-function ProductGrid({ data }: { data: any }) {
-  const [products, setProducts] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+// تبدیل به کامپوننت ناهمگام سرور جهت دریافت بهینه محصولات
+async function ProductGrid({ data }: { data: any }) {
+  let products: any[] = []
+  
+  try {
+    // درخواست هدفمند فقط برای ۴ محصول (جلوگیری از واکشی کل دیتابیس)
+    products = await productService.getProducts(4, 0)
+  } catch (err) {
+    console.error("خطا در دریافت محصولات گرید:", err)
+  }
 
-  useEffect(() => {
-    // دریافت محصولات واقعی از بک‌اند
-    apiClient.get("/products")
-      .then(res => {
-        // دریافت ۴ محصول اول برای نمایش در این بخش
-        setProducts(res.data.slice(0, 4))
-      })
-      .catch(err => console.error("خطا در دریافت محصولات:", err))
-      .finally(() => setIsLoading(false))
-  }, [])
-
-  // توابع کمکی برای استخراج امن قیمت و عکس از ساختار تودرتوی محصول
   const getPrice = (product: any) => {
     if (product.variants && product.variants.length > 0) {
       return product.variants[0].price || 0
@@ -126,26 +110,19 @@ function ProductGrid({ data }: { data: any }) {
     return 0
   }
 
-const getImage = (product: any) => {
+  const getImage = (product: any) => {
     try {
-      if (
-        product?.variants?.length > 0 && 
-        product.variants[0].images?.length > 0 &&
-        product.variants[0].images[0].image_url // اینجا فیلد صحیح (image_url) را بررسی می‌کنیم
-      ) {
-        const imageUrl = product.variants[0].images[0].image_url;
-        // اطمینان نهایی که رشته خالی نیست
+      if (product?.variants?.length > 0 && product.variants[0].images?.length > 0 && product.variants[0].images[0].image_url) {
+        const imageUrl = product.variants[0].images[0].image_url
         if (typeof imageUrl === 'string' && imageUrl.trim() !== '') {
-          return imageUrl;
+          return imageUrl
         }
       }
-      // بازگشت عکس پیش‌فرض مطمئن
-      return "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=800&auto=format&fit=crop";
+      return "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=800&auto=format&fit=crop"
     } catch (error) {
-      return "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=800&auto=format&fit=crop";
+      return "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=800&auto=format&fit=crop"
     }
   }
-
 
   return (
     <section className="w-full max-w-[1200px] mx-auto px-4 py-20">
@@ -156,78 +133,59 @@ const getImage = (product: any) => {
         </h2>
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center items-center h-40">
-           <div className="animate-pulse flex space-x-4 space-x-reverse">
-             <div className="rounded-2xl bg-zinc-200 h-40 w-40"></div>
-             <div className="rounded-2xl bg-zinc-200 h-40 w-40"></div>
-           </div>
-        </div>
-      ) : (
-        <div className="flex flex-col md:flex-row gap-8">
-          <div className="w-full space-y-6">
-            <h3 className="text-xl font-bold text-zinc-500 border-b border-zinc-200 pb-2">جدیدترین‌های فروشگاه</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {products.map((product) => (
-                <Link href={`/product/${product.slug}`} key={product.slug} className="group">
-                  <div className="bg-white rounded-2xl p-4 border border-zinc-100 shadow-sm transition-all hover:shadow-md hover:border-zinc-200 h-full flex flex-col">
-                    <div className="relative h-48 w-full mb-4 bg-zinc-50 rounded-xl overflow-hidden shrink-0">
-                      <Image src={getImage(product)} alt={product.title} fill className="object-cover group-hover:scale-110 transition-transform duration-500" />
-                    </div>
-                    <h4 className="font-bold text-sm text-zinc-800 line-clamp-2 mb-2 flex-grow">{product.title}</h4>
-                    <p className="text-emerald-600 font-black text-sm mt-auto">
-                      {new Intl.NumberFormat("fa-IR").format(getPrice(product))} تومان
-                    </p>
+      <div className="flex flex-col md:flex-row gap-8">
+        <div className="w-full space-y-6">
+          <h3 className="text-xl font-bold text-zinc-500 border-b border-zinc-200 pb-2">جدیدترین‌های فروشگاه</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {products.map((product) => (
+              <Link href={`/product/${product.slug}`} key={product.slug} className="group">
+                <div className="bg-white rounded-2xl p-4 border border-zinc-100 shadow-sm transition-all hover:shadow-md hover:border-zinc-200 h-full flex flex-col">
+                  <div className="relative h-48 w-full mb-4 bg-zinc-50 rounded-xl overflow-hidden shrink-0">
+                    <Image src={getImage(product)} alt={product.title} fill className="object-cover group-hover:scale-110 transition-transform duration-500" />
                   </div>
-                </Link>
-              ))}
-            </div>
+                  <h4 className="font-bold text-sm text-zinc-800 line-clamp-2 mb-2 flex-grow">{product.title}</h4>
+                  <p className="text-emerald-600 font-black text-sm mt-auto">
+                    {new Intl.NumberFormat("fa-IR").format(getPrice(product))} تومان
+                  </p>
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
-      )}
+      </div>
     </section>
   )
 }
 
-function BrandCollection({ data }: { data: any }) {
-  const [products, setProducts] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    // می‌توانید در آینده اینجا یک پارامتر برای دریافت محصولات یک برند خاص (مثل brand_id) پاس بدهید
-    apiClient.get("/products")
-      .then(res => {
-        // برای تنوع، مثلاً محصولات را برعکس می‌کنیم یا ۵ تای بعدی را می‌گیریم
-        setProducts(res.data.reverse().slice(0, 5))
-      })
-      .catch(err => console.error(err))
-      .finally(() => setIsLoading(false))
-  }, [])
+async function BrandCollection({ data }: { data: any }) {
+  let products: any[] = []
+  
+  try {
+    // درخواست هدفمند فقط برای ۵ محصول
+    products = await productService.getProducts(5, 0)
+  } catch (err) {
+    console.error("خطا در دریافت محصولات کالکشن:", err)
+  }
 
   const getPrice = (product: any) => {
     if (product.variants && product.variants.length > 0) return product.variants[0].price || 0
     return 0
   }
 
-const getImage = (product: any) => {
+  const getImage = (product: any) => {
     try {
-      if (
-        product?.variants?.length > 0 && 
-        product.variants[0].images?.length > 0 &&
-        product.variants[0].images[0].image_url // اینجا فیلد صحیح (image_url) را بررسی می‌کنیم
-      ) {
-        const imageUrl = product.variants[0].images[0].image_url;
-        // اطمینان نهایی که رشته خالی نیست
+      if (product?.variants?.length > 0 && product.variants[0].images?.length > 0 && product.variants[0].images[0].image_url) {
+        const imageUrl = product.variants[0].images[0].image_url
         if (typeof imageUrl === 'string' && imageUrl.trim() !== '') {
-          return imageUrl;
+          return imageUrl
         }
       }
-      // بازگشت عکس پیش‌فرض مطمئن
-      return "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=800&auto=format&fit=crop";
+      return "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=800&auto=format&fit=crop"
     } catch (error) {
-      return "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=800&auto=format&fit=crop";
+      return "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=800&auto=format&fit=crop"
     }
   }
+
   return (
     <section className="w-full bg-[#B30000] py-16 my-8">
       <div className="max-w-[1200px] mx-auto px-4">
@@ -235,31 +193,29 @@ const getImage = (product: any) => {
           <div className="text-white">
             <h2 className="text-3xl font-black mb-2">{data.title || "کالکشن اختصاصی"}</h2>
           </div>
-          <Button className="bg-white text-[#B30000] hover:bg-zinc-100 rounded-xl font-bold px-6">
-            مشاهده همه <ChevronLeft className="w-4 h-4 mr-1" />
-          </Button>
+          <Link href="/shop">
+            <Button className="bg-white text-[#B30000] hover:bg-zinc-100 rounded-xl font-bold px-6">
+              مشاهده همه <ChevronLeft className="w-4 h-4 mr-1" />
+            </Button>
+          </Link>
         </div>
 
-        {isLoading ? (
-          <div className="text-white text-center py-10 opacity-70">در حال بارگذاری...</div>
-        ) : (
-          <div className="flex overflow-x-auto gap-6 pb-6 snap-x snap-mandatory scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
-            {products.map((product) => (
-              <div key={product.slug} className="min-w-[280px] sm:min-w-[320px] bg-white rounded-3xl p-5 snap-start shrink-0 flex flex-col">
-                <div className="relative h-48 bg-zinc-50 rounded-2xl mb-4 overflow-hidden shrink-0">
-                   <Image src={getImage(product)} alt={product.title} fill className="object-cover" />
-                </div>
-                <h4 className="font-bold text-zinc-900 mb-2 line-clamp-1">{product.title}</h4>
-                <div className="flex justify-between items-center border-t border-zinc-100 pt-4 mt-auto">
-                  <span className="font-black text-zinc-900">{new Intl.NumberFormat("fa-IR").format(getPrice(product))} تومان</span>
-                  <Link href={`/product/${product.slug}`}>
-                     <Button size="sm" variant="outline" className="rounded-xl h-8 text-xs font-bold">خرید</Button>
-                  </Link>
-                </div>
+        <div className="flex overflow-x-auto gap-6 pb-6 snap-x snap-mandatory scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
+          {products.map((product) => (
+            <div key={product.slug} className="min-w-[280px] sm:min-w-[320px] bg-white rounded-3xl p-5 snap-start shrink-0 flex flex-col">
+              <div className="relative h-48 bg-zinc-50 rounded-2xl mb-4 overflow-hidden shrink-0">
+                 <Image src={getImage(product)} alt={product.title} fill className="object-cover" />
               </div>
-            ))}
-          </div>
-        )}
+              <h4 className="font-bold text-zinc-900 mb-2 line-clamp-1">{product.title}</h4>
+              <div className="flex justify-between items-center border-t border-zinc-100 pt-4 mt-auto">
+                <span className="font-black text-zinc-900">{new Intl.NumberFormat("fa-IR").format(getPrice(product))} تومان</span>
+                <Link href={`/product/${product.slug}`}>
+                   <Button size="sm" variant="outline" className="rounded-xl h-8 text-xs font-bold">خرید</Button>
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   )

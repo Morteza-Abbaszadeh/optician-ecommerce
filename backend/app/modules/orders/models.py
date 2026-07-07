@@ -1,10 +1,14 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Float, ForeignKey, DateTime, Text, Enum
+from sqlalchemy import Column, String, Integer, Float, ForeignKey, DateTime, Text,  JSON,Enum
 from sqlalchemy.orm import relationship
 import enum
 from app.core.database import Base
 from sqlalchemy.dialects.postgresql import UUID
+import uuid
+from datetime import datetime
+
+
 # ==========================================
 # وضعیت‌های دقیق سفارش (برای پیگیری مشتری و داشبورد)
 # ==========================================
@@ -75,7 +79,8 @@ class OrderItem(Base):
     # بسیار مهم: ثبت قیمت در لحظه خرید!
     # اگر فردا قیمت عینک بالا رفت، تاریخچه خریدهای قبلی نباید تغییر کند.
     unit_price = Column(Float, nullable=False) 
-
+    prescription = Column(JSON, nullable=True)
+    
     # روابط
     order = relationship("Order", back_populates="items")
     variant = relationship("ProductVariant")

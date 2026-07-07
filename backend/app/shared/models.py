@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
+from app.modules.home.models import HomeSection
 
 class TimeStampedModel(Base):
     """

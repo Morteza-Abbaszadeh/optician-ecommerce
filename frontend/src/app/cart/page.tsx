@@ -3,214 +3,162 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
 import { useCartStore } from "@/store/useCartStore"
-import { useAuthStore } from "@/store/useAuthStore"
 import { Button } from "@/components/ui/button"
-import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, Loader2, AlertCircle } from "lucide-react"
+import { Trash2, Plus, Minus, ShoppingBag, Eye, ArrowLeft, ShieldCheck } from "lucide-react"
 
 export default function CartPage() {
-  const router = useRouter()
-  const { items, updateQuantity, removeItem, getTotalPrice } = useCartStore()
-  const { isAuthenticated } = useAuthStore()
+  // جلوگیری از خطای Hydration در Next.js
+  const [isClient, setIsClient] = useState(false)
   
-  const [isMounted, setIsMounted] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState("")
-  
+  const { items, removeItem, updateQuantity, getTotalPrice } = useCartStore()
+
   useEffect(() => {
-    setIsMounted(true)
+    setIsClient(true)
   }, [])
 
-  if (!isMounted) {
-    return <div className="min-h-screen bg-zinc-50" />
+  // در زمان رندر اولیه سرور، یک صفحه خالی یا لودینگ برمی‌گردانیم
+  if (!isClient) {
+    return <div className="min-h-screen bg-zinc-50 flex items-center justify-center" dir="rtl"><div className="animate-pulse flex items-center gap-2"><ShoppingBag className="text-zinc-400" /> در حال بارگذاری سبد خرید...</div></div>
   }
 
-  const totalPrice = getTotalPrice()
-  const shippingCost = totalPrice > 0 ? 50000 : 0
-
-  // تغییر اساسی: این تابع دیگر فاکتور ثبت نمی‌کند، فقط کاربر را به صفحه انتخاب آدرس می‌برد
-  const handleCheckout = () => {
-    if (!isAuthenticated) {
-      router.push("/login?redirect=/cart")
-      return
-    }
-
-    setIsSubmitting(true)
-    // هدایت به صفحه جدید پرداخت و مدیریت آدرس‌ها
-    router.push("/checkout")
+  // حالت سبد خرید خالی
+  if (items.length === 0) {
+    return (
+      <div className="min-h-screen bg-zinc-50 flex flex-col items-center justify-center p-4 text-center" dir="rtl">
+        <div className="w-32 h-32 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm">
+          <ShoppingBag className="w-12 h-12 text-zinc-300" />
+        </div>
+        <h2 className="text-2xl font-black text-zinc-800 mb-4">سبد خرید شما خالی است</h2>
+        <p className="text-zinc-500 mb-8 max-w-md">هنوز هیچ محصولی به سبد خرید خود اضافه نکرده‌اید. برای مشاهده عینک‌ها و محصولات جدید به فروشگاه سر بزنید.</p>
+        <Link href="/shop">
+          <Button className="h-14 px-8 bg-zinc-900 text-white rounded-2xl text-lg font-bold hover:bg-zinc-800 transition-all hover:-translate-y-1">
+            مشاهده محصولات
+          </Button>
+        </Link>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans pb-24" dir="rtl">
-      <div className="max-w-[1200px] mx-auto px-4 py-12">
-        
-        <div className="flex items-center gap-3 mb-8">
-          <ShoppingBag className="w-8 h-8 text-zinc-900" />
-          <h1 className="text-3xl font-black text-zinc-900">سبد خرید شما</h1>
-        </div>
+    <div className="min-h-screen bg-zinc-50 pb-24" dir="rtl">
+      <div className="max-w-[1200px] mx-auto px-4 py-8 md:py-12">
+        <h1 className="text-3xl font-black text-zinc-900 mb-8 flex items-center gap-3">
+          <ShoppingBag className="w-8 h-8 text-emerald-600" /> سبد خرید
+        </h1>
 
-        {error && (
-          <div className="bg-red-50 text-red-700 p-4 rounded-2xl mb-8 border border-red-200 shadow-sm flex items-start gap-3 animate-in slide-in-from-top-4 fade-in duration-300">
-            <AlertCircle className="w-6 h-6 text-red-500 shrink-0 mt-0.5" />
-            <div className="flex flex-col">
-              <span className="font-bold text-red-800 text-lg mb-1">خطا</span>
-              <p className="font-medium text-sm md:text-base leading-relaxed">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {items.length === 0 ? (
-          <div className="bg-white p-16 rounded-3xl text-center border border-zinc-100 shadow-sm flex flex-col items-center">
-            <div className="w-24 h-24 bg-zinc-50 rounded-full flex items-center justify-center mb-6">
-              <ShoppingBag className="w-10 h-10 text-zinc-300" />
-            </div>
-            <h2 className="text-xl font-bold text-zinc-700 mb-2">سبد خرید شما خالی است</h2>
-            <p className="text-zinc-500 mb-8">هنوز هیچ محصولی به سبد خرید خود اضافه نکرده‌اید.</p>
-            <Link href="/shop">
-              <Button size="lg" className="bg-zinc-900 text-white hover:bg-zinc-800 rounded-xl px-8 transition-transform active:scale-95">
-                بازگشت به فروشگاه
-              </Button>
-            </Link>
-          </div>
-        ) : (
-          <div className="flex flex-col lg:flex-row gap-8 relative">
-            
-            <div className={`w-full lg:w-2/3 space-y-4 transition-opacity duration-300 ${isSubmitting ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-              {items.map((item) => (
-                <div key={item.variantId} className="bg-white p-4 rounded-2xl border border-zinc-100 shadow-sm flex gap-4 md:gap-6 items-center hover:shadow-md transition-shadow">
-                  
-                  <div className="relative w-24 h-24 md:w-32 md:h-32 bg-zinc-50 rounded-xl overflow-hidden flex-shrink-0">
-                    <Image
-                      src={item.image || "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=400&auto=format&fit=crop"}
-                      alt={item.title}
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
-
-                  <div className="flex-grow py-2 flex flex-col h-full justify-between">
-                    <div>
-                      <Link href={`/product/${item.slug}`}>
-                        <h3 className="text-base md:text-lg font-bold text-zinc-900 hover:text-zinc-600 line-clamp-2 mb-1">
-                          {item.title}
-                        </h3>
-                      </Link>
-                      <div className="flex items-center gap-2 text-sm text-zinc-500 mb-2">
-                        <span>رنگ:</span>
-                        <div className="flex items-center gap-1">
-                          <span 
-                            className="w-3 h-3 rounded-full border border-zinc-300 inline-block" 
-                            style={{ backgroundColor: item.colorCode || "#000" }} 
-                          />
-                          <span className="font-medium">{item.colorName}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between mt-auto">
-                      <div className="flex items-center border border-zinc-200 rounded-lg bg-zinc-50">
-                        <button 
-                          onClick={() => updateQuantity(item.variantId, item.quantity - 1)}
-                          className="p-2 text-zinc-500 hover:text-zinc-900 transition-colors disabled:opacity-50"
-                          disabled={item.quantity <= 1 || isSubmitting}
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        <span className="w-8 text-center text-sm font-bold text-zinc-900">
-                          {item.quantity}
-                        </span>
-                        <button 
-                          onClick={() => updateQuantity(item.variantId, item.quantity + 1)}
-                          className="p-2 text-zinc-500 hover:text-zinc-900 transition-colors disabled:opacity-50"
-                          disabled={item.quantity >= item.maxStock || isSubmitting}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <div className="text-left flex flex-col items-end">
-                        <span className="text-lg font-black text-zinc-900">
-                          {new Intl.NumberFormat("fa-IR").format(item.price * item.quantity)} <span className="text-xs font-medium text-zinc-500">تومان</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pl-2">
-                    <button 
-                      onClick={() => removeItem(item.variantId)}
-                      disabled={isSubmitting}
-                      className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                      title="حذف از سبد خرید"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                </div>
-              ))}
-            </div>
-
-            <div className="w-full lg:w-1/3">
-              <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-xl shadow-zinc-100/50 sticky top-28">
-                <h3 className="text-lg font-black text-zinc-900 mb-6 border-b border-zinc-100 pb-4">خلاصه سفارش</h3>
+        <div className="flex flex-col lg:flex-row gap-8">
+          
+          {/* ستون راست: لیست محصولات */}
+          <div className="w-full lg:w-2/3 space-y-4">
+            {items.map((item) => (
+              <div key={item.cartItemId} className="bg-white p-4 md:p-6 rounded-3xl border border-zinc-200 shadow-sm flex flex-col sm:flex-row gap-6 items-start sm:items-center relative">
                 
-                <div className="space-y-4 mb-6">
-                  <div className="flex justify-between items-center text-zinc-600">
-                    <span>مبلغ کل کالاها</span>
-                    <span className="font-bold text-zinc-900">
-                      {new Intl.NumberFormat("fa-IR").format(totalPrice)} <span className="text-xs font-normal">تومان</span>
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-zinc-600">
-                    <span>هزینه ارسال</span>
-                    <span className="font-bold text-zinc-900">
-                      {new Intl.NumberFormat("fa-IR").format(shippingCost)} <span className="text-xs font-normal">تومان</span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="border-t border-zinc-100 pt-6 mb-8">
-                  <div className="flex justify-between items-center">
-                    <span className="text-base font-bold text-zinc-900">مبلغ قابل پرداخت</span>
-                    <span className="text-2xl font-black text-zinc-900 text-left">
-                      {new Intl.NumberFormat("fa-IR").format(totalPrice + shippingCost)} <span className="text-sm font-medium text-zinc-500 block -mt-1">تومان</span>
-                    </span>
-                  </div>
-                </div>
-
-                <Button 
-                  onClick={handleCheckout}
-                  disabled={isSubmitting}
-                  size="lg" 
-                  className={`w-full h-14 text-lg font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all duration-200 
-                    ${isSubmitting ? 'bg-zinc-700 text-zinc-300 cursor-not-allowed opacity-90' : 'bg-zinc-900 text-white hover:bg-zinc-800 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98]'}`}
+                {/* دکمه حذف */}
+                <button 
+                  onClick={() => removeItem(item.cartItemId)}
+                  className="absolute top-4 left-4 p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                  title="حذف از سبد"
                 >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-6 h-6 animate-spin" />
-                      انتقال به مرحله بعد...
-                    </>
-                  ) : (
-                    <>
-                      تکمیل خرید و انتخاب آدرس
-                      <ArrowRight className="w-5 h-5" />
-                    </>
+                  <Trash2 className="w-5 h-5" />
+                </button>
+
+                {/* تصویر کالا */}
+                <Link href={`/product/${item.slug}`} className="relative w-28 h-28 shrink-0 bg-zinc-50 rounded-2xl overflow-hidden border border-zinc-100">
+                  <Image src={item.image} alt={item.title} fill className="object-cover p-2" />
+                </Link>
+
+                {/* اطلاعات کالا */}
+                <div className="flex-1 space-y-3 w-full">
+                  <div>
+                    <Link href={`/product/${item.slug}`}>
+                      <h3 className="text-lg font-bold text-zinc-900 hover:text-blue-600 line-clamp-1">{item.title}</h3>
+                    </Link>
+                    <div className="flex flex-wrap gap-2 mt-2 text-sm text-zinc-500 font-medium">
+                      {item.colorName && <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full border border-zinc-200" style={{ backgroundColor: item.colorCode || '#000' }}></span> {item.colorName}</span>}
+                      {item.size && <span>| سایز: <span dir="ltr">{item.size}</span></span>}
+                    </div>
+                  </div>
+
+                  {/* نمایش اطلاعات نمره چشم (اگر وجود داشت) */}
+                  {item.prescription && (
+                    <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl mt-2 w-full max-w-sm">
+                      <div className="text-xs font-bold text-blue-800 mb-2 flex items-center gap-1"><Eye className="w-4 h-4"/> اطلاعات نمره چشم:</div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-blue-900">
+                        <div><span className="opacity-70">راست (OD):</span> <span dir="ltr">{item.prescription.rightEye.sph} / {item.prescription.rightEye.cyl} / {item.prescription.rightEye.axis}</span></div>
+                        <div><span className="opacity-70">چپ (OS):</span> <span dir="ltr">{item.prescription.leftEye.sph} / {item.prescription.leftEye.cyl} / {item.prescription.leftEye.axis}</span></div>
+                        <div className="col-span-2"><span className="opacity-70">فاصله مردمک (PD):</span> {item.prescription.pd}</div>
+                      </div>
+                    </div>
                   )}
+
+                  <div className="flex items-center justify-between mt-4">
+                    <span className="font-black text-zinc-900 text-lg">
+                      {new Intl.NumberFormat("fa-IR").format(item.price)} <span className="text-sm font-medium text-zinc-500">تومان</span>
+                    </span>
+
+                    {/* کنترل تعداد */}
+                    <div className="flex items-center bg-zinc-100 rounded-xl border border-zinc-200 h-10">
+                      <button 
+                        onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
+                        className="w-10 h-full flex items-center justify-center text-zinc-600 hover:text-zinc-900 transition-colors"
+                        disabled={item.quantity <= 1}
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="w-10 text-center font-bold text-sm">{item.quantity}</span>
+                      <button 
+                        onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
+                        className="w-10 h-full flex items-center justify-center text-zinc-600 hover:text-zinc-900 transition-colors"
+                        disabled={item.quantity >= item.maxStock}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* ستون چپ: فاکتور و پرداخت */}
+          <div className="w-full lg:w-1/3">
+            <div className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm sticky top-24">
+              <h3 className="text-xl font-black text-zinc-900 mb-6">خلاصه سفارش</h3>
+              
+              <div className="space-y-4 mb-6 text-zinc-600 font-medium">
+                <div className="flex justify-between">
+                  <span>تعداد اقلام:</span>
+                  <span className="font-bold text-zinc-900">{items.reduce((acc, item) => acc + item.quantity, 0)} کالا</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>هزینه ارسال:</span>
+                  <span className="font-bold text-emerald-600">رایگان</span>
+                </div>
+              </div>
+
+              <div className="border-t border-zinc-100 pt-6 mb-6">
+                <div className="flex justify-between items-end">
+                  <span className="font-bold text-zinc-800">مبلغ قابل پرداخت:</span>
+                  <span className="text-3xl font-black text-zinc-900">
+                    {new Intl.NumberFormat("fa-IR").format(getTotalPrice())} <span className="text-sm font-medium text-zinc-500">تومان</span>
+                  </span>
+                </div>
+              </div>
+
+              <Link href="/checkout">
+                <Button className="w-full h-16 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-lg font-black shadow-lg shadow-emerald-600/20 transition-all hover:-translate-y-1 flex items-center justify-center gap-2">
+                  تایید و تکمیل سفارش <ArrowLeft className="w-5 h-5" />
                 </Button>
-                
-                {!isAuthenticated && (
-                  <p className="text-xs text-center text-zinc-500 mt-4 font-medium bg-zinc-50 p-2 rounded-lg">
-                    برای تکمیل خرید به حساب کاربری خود منتقل می‌شوید.
-                  </p>
-                )}
+              </Link>
+
+              <div className="mt-6 flex items-center justify-center gap-2 text-xs font-bold text-zinc-400">
+                <ShieldCheck className="w-4 h-4" /> پرداخت امن و تضمین اصالت کالا
               </div>
             </div>
-
           </div>
-        )}
 
+        </div>
       </div>
     </div>
   )

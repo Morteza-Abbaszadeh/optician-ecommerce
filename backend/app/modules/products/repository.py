@@ -53,34 +53,29 @@ class ProductRepository:
 
     async def create_product_with_variants(self, product_data: dict) -> Product:
         """
-        ساخت محصول جدید به همراه تمام تنوع‌ها (رنگ/سایز) و تصاویر مرتبط در یک عملیات یکپارچه
+        نسخه بهینه: ساخت محصول و تمام روابط آن به صورت یکپارچه (بدون flush های مکرر)
         """
-        # ۱. جدا کردن تنوع‌ها از دیتای اصلی محصول
         variants_data = product_data.pop("variants", [])
-        
-        # ۲. ساخت بدنه اصلی محصول
         new_product = Product(**product_data)
-        self.session.add(new_product)
-        await self.session.flush() # برای دریافت سریع آیدی محصول ساخته شده
         
-        # ۳. حلقه زدن روی تنوع‌ها و ساخت آن‌ها
+        # استفاده از قابلیت ریلیشن‌شیپ SQLAlchemy به جای دریافت دستی ID
         for variant_dict in variants_data:
             images_data = variant_dict.pop("images", [])
-            new_variant = ProductVariant(product_id=new_product.id, **variant_dict)
-            self.session.add(new_variant)
-            await self.session.flush() # برای دریافت آیدی تنوع
+            new_variant = ProductVariant(**variant_dict)
             
-            # ۴. ذخیره عکس‌های هر تنوع
             for image_dict in images_data:
-                new_image = ProductImage(variant_id=new_variant.id, **image_dict)
-                self.session.add(new_image)
+                new_image = ProductImage(**image_dict)
+                new_variant.images.append(new_image)
                 
-        # ۵. تایید نهایی و ذخیره قطعی در دیتابیس
+            new_product.variants.append(new_variant)
+
+        # تمام فرآیند اینسرت فقط با یک بار ارتباط با دیتابیس انجام می‌شود
+        self.session.add(new_product)
         await self.session.commit()
         
-        # ۶. بازگرداندن محصول کامل برای نمایش در فرانت‌اند
         return await self.get_product_by_slug(new_product.slug)
-
+    
+    
 # ==========================================
     # بخش دسته‌بندی‌ها (Categories)
     # ==========================================
@@ -137,7 +132,9 @@ class ProductRepository:
         return result.scalars().first()
 
     async def update_product_with_variants(self, product_id: str, product_data: dict) -> Product:
-        """ویرایش محصول و جایگزینی تنوع‌ها و عکس‌های جدید"""
+        """
+        ویرایش امن محصول: جلوگیری از خطای Foreign Key سفارشات با آپدیت به جای حذف
+        """
         product = await self.get_product_by_id(product_id)
         if not product:
             return None
@@ -148,21 +145,32 @@ class ProductRepository:
         for key, value in product_data.items():
             setattr(product, key, value)
 
-        # ۲. پاک کردن تنوع‌ها و عکس‌های قدیمی (روش جایگزینی سریع برای MVP)
-        for variant in product.variants:
-            await self.session.delete(variant)
-        await self.session.flush()
-
-        # ۳. ذخیره تنوع‌ها و عکس‌های جدیدی که ادمین فرستاده
+        # ۲. مدیریت هوشمند تنوع‌ها به جای حذف فیزیکی
+        existing_variants = {str(v.id): v for v in product.variants}
+        
         for variant_dict in variants_data:
+            # اگر آیدی از سمت فرانت‌اند ارسال شده بود، یعنی ویرایش است
+            variant_id = variant_dict.pop("id", None)
             images_data = variant_dict.pop("images", [])
-            new_variant = ProductVariant(product_id=product.id, **variant_dict)
-            self.session.add(new_variant)
-            await self.session.flush()
             
-            for image_dict in images_data:
-                new_image = ProductImage(variant_id=new_variant.id, **image_dict)
-                self.session.add(new_image)
+            if variant_id and str(variant_id) in existing_variants:
+                # آپدیت تنوع موجود (بدون اینکه آیدی آن عوض شود تا سفارشات قبلی خراب نشوند)
+                variant_to_update = existing_variants[str(variant_id)]
+                for k, v in variant_dict.items():
+                    setattr(variant_to_update, k, v)
+                
+                # مدیریت ساده تصاویر: پاک کردن قدیمی‌ها و اضافه کردن جدیدها (تصاویر معمولاً FK حیاتی ندارند)
+                for img in variant_to_update.images:
+                    await self.session.delete(img)
+                
+                for image_dict in images_data:
+                    variant_to_update.images.append(ProductImage(**image_dict))
+            else:
+                # اگر آیدی نداشت، یعنی تنوع جدیدی است که ادمین اضافه کرده
+                new_variant = ProductVariant(**variant_dict)
+                for image_dict in images_data:
+                    new_variant.images.append(ProductImage(**image_dict))
+                product.variants.append(new_variant)
 
         await self.session.commit()
         return await self.get_product_by_id(product_id)

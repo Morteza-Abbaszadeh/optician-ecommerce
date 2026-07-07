@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import List
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Optician E-Commerce API"
@@ -9,11 +10,14 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str
     POSTGRES_PORT: str
     POSTGRES_DB: str
-# تنظیمات جدید JWT
-    SECRET_KEY: str = "JHDsk2907hjcwq4132*&^%#$&()idoaskldq981023PI_DAZ><XCMKWOU@Oi190dkslJL"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # اعتبار توکن برای ۷ روز
     
+    # تنظیمات امنیتی (بدون مقدار پیش‌فرض تا حتما از .env خوانده شود)
+    SECRET_KEY: str 
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 
+    
+    # تنظیمات داینامیک CORS
+    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000"]
     
     @property
     def DATABASE_URL(self) -> str:

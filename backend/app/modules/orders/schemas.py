@@ -3,12 +3,15 @@ from typing import List, Optional
 from datetime import datetime
 from uuid import UUID
 from app.modules.orders.models import OrderStatus, PaymentMethod
+from pydantic import BaseModel, ConfigDict
+from typing import List, Optional, Dict, Any
 
 # === فرم ثبت سفارش اولیه از سمت فرانت‌اند (مشتری) ===
 class OrderItemCreate(BaseModel):
     variant_id: str
     quantity: int
-
+    prescription: Optional[Dict[str, Any]] = None
+    
 class OrderCreate(BaseModel):
     items: List[OrderItemCreate]
     shipping_address: str
@@ -28,7 +31,8 @@ class OrderItemResponse(BaseModel):
     quantity: int
     unit_price: float
     model_config = ConfigDict(from_attributes=True)
-
+    prescription: Optional[Dict[str, Any]] = None
+    
 # === دیتای خروجی کامل سفارش (برای پروفایل و داشبورد) ===
 class OrderResponse(BaseModel):
     id: str | UUID

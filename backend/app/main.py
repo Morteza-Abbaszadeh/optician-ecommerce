@@ -6,25 +6,30 @@ from app.modules.orders.router import router as orders_router
 from app.modules.home.router import router as home_router
 from fastapi.staticfiles import StaticFiles
 import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings # اضافه کردن تنظیمات
+
+
 
 app = FastAPI(
-    
-    title="Optician E-Commerce API",
+    title=settings.PROJECT_NAME,
     description="Modular Monolith API for Optician E-Commerce",
     version="1.0.0"
 )
+
+
 UPLOAD_DIR = "static/uploads/products"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # API Versioning and Routing Registration
 app.include_router(users_router, prefix="/api/v1/users", tags=["Users"])
 app.include_router(products_router, prefix="/api/v1")

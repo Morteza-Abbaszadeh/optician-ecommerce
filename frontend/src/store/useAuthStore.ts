@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import { apiClient } from "@/services/apiClient" // مسیر apiClient خود را چک کنید
+import { apiClient } from "@/services/apiClient" // در قدم‌های قبلی فایل کلاینت شبکه را در lib اصلاح کردیم
 
 interface User {
   id: string
@@ -13,7 +13,7 @@ interface AuthState {
   token: string | null
   user: User | null
   isAuthenticated: boolean
-  isHydrated: boolean
+  isHydrated: boolean // این مقدار برای هماهنگی با SSR در Next.js حیاتی است
   
   setToken: (token: string) => void
   fetchUser: () => Promise<void>
@@ -37,28 +37,28 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       
-      // گرفتن اطلاعات کاربر از سرور (برای چک کردن is_superuser)
+      // گرفتن اطلاعات کاربر از سرور بهینه شده
       fetchUser: async () => {
         try {
           const token = get().token;
-          if (token) {
-             apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`
-          }
-          // مسیر گرفتن اطلاعات کاربر در بک‌اند شما (اگر مسیرش فرق دارد اینجا اصلاح کنید)
+          // جلوگیری از ارسال درخواست اضافی (۴۰۱) وقتی کاربر اصلا لاگین نیست
+          if (!token) return;
+
+          apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`
           const response = await apiClient.get('/users/me') 
           set({ user: response.data })
         } catch (error) {
-          console.error("Failed to fetch user profile:", error)
-          // اگر توکن منقضی شده بود، کاربر را خارج می‌کنیم
+          console.error("خطا در دریافت پروفایل کاربری:", error)
+          // خروج امن در صورت منقضی شدن توکن
           get().logout()
         }
       },
 
-      // خروج از حساب
+      // خروج از حساب یکپارچه و تمیز
       logout: () => {
         set({ token: null, user: null, isAuthenticated: false })
         delete apiClient.defaults.headers.common['Authorization']
-        localStorage.removeItem("access_token")
+        // نیازی به پاک کردن دستی localStorage نیست، پلاگین persist مقادیر null را ذخیره می‌کند
       },
       
       setHydrated: () => set({ isHydrated: true }),

@@ -12,7 +12,11 @@ const nextConfig = {
         hostname: '127.0.0.1',
         port: '8000',
       },
-      // این یکی را هم نگه دارید تا عکس‌های تستی قبلی (Unsplash) خراب نشوند
+      // برای زمانی که پروژه روی دامنه واقعی رفت:
+      {
+        protocol: 'https',
+        hostname: process.env.NEXT_PUBLIC_IMAGE_DOMAIN || 'api.yourdomain.com', 
+      },
       {
         protocol: 'https',
         hostname: 'images.unsplash.com', 

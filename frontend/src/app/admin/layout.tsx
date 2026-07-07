@@ -4,7 +4,13 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuthStore } from "@/store/useAuthStore"
-import { Package, ShoppingCart, Users, LayoutDashboard, LogOut } from "lucide-react"
+import { 
+  Package,   ShoppingCart,   Users,   LayoutDashboard, 
+  LogOut,  LayoutTemplate,  Tags
+} from "lucide-react"
+
+
+
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -24,10 +30,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return <div className="min-h-screen bg-zinc-50 flex items-center justify-center">در حال احراز هویت...</div>
   }
 
+  // 👈 دکمه چیدمان صفحه اصلی به لیست منوها اضافه شد
   const menuItems = [
     { name: "داشبورد", icon: LayoutDashboard, href: "/admin" },
     { name: "مدیریت محصولات", icon: Package, href: "/admin/products" },
+    { name: "دسته‌ها و برندها", icon: Tags, href: "/admin/categories" }, 
     { name: "سفارشات", icon: ShoppingCart, href: "/admin/orders" },
+    { name: "چیدمان صفحه", icon: LayoutTemplate, href: "/admin/home-layout" }, 
     { name: "کاربران", icon: Users, href: "/admin/users" },
   ]
 

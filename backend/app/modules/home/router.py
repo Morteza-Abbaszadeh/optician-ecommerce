@@ -5,7 +5,8 @@ from typing import List
 from app.modules.users.dependencies import get_current_user, get_current_superuser
 
 from pydantic import BaseModel
-
+from typing import Optional, List
+from uuid import UUID
 from app.core.database import get_db_session
 from app.modules.home.models import HomeSection
 from app.modules.home.schemas import HomeSectionResponse
@@ -43,8 +44,10 @@ async def get_home_layout(session: AsyncSession = Depends(get_db_session)):
 
 
 class SectionUpdate(BaseModel):
-    order: int
-    is_active: bool
+    order: Optional[int] = None
+    is_active: Optional[bool] = None
+    title: Optional[str] = None
+    product_ids: Optional[List[UUID]] = None
 
 @router.patch("/{section_id}", dependencies=[Depends(get_current_superuser)])
 async def update_section(
@@ -55,10 +58,19 @@ async def update_section(
     stmt = select(HomeSection).where(HomeSection.id == section_id)
     result = await session.execute(stmt)
     section = result.scalar_one_or_none()
+    
     if not section:
         raise HTTPException(status_code=404, detail="بخش مورد نظر یافت نشد")
     
-    section.order = data.order
-    section.is_active = data.is_active
+    # آپدیت هوشمند: فقط فیلدهایی که از فرانت ارسال شده‌اند آپدیت می‌شوند
+    if data.order is not None:
+        section.order = data.order
+    if data.is_active is not None:
+        section.is_active = data.is_active
+    if data.title is not None:
+        section.title = data.title
+    if data.product_ids is not None:
+        section.product_ids = data.product_ids
+        
     await session.commit()
     return {"message": "با موفقیت به‌روزرسانی شد"}
