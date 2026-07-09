@@ -10,6 +10,9 @@ from app.modules.products.models import Product
 import os
 import uuid
 from fastapi import UploadFile, File
+from fastapi_cache.decorator import cache
+from fastapi_cache import FastAPICache
+
 
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -19,6 +22,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
     response_model=List[ProductResponse], 
     summary="دریافت لیست محصولات"
 )
+@cache(expire=300)
 async def get_products(
     limit: int = 20, 
     offset: int = 0,
@@ -35,6 +39,7 @@ async def get_products(
     response_model=ProductResponse, 
     summary="دریافت جزئیات یک محصول"
 )
+@cache(expire=600)
 async def get_product(
     slug: str,
     service: ProductService = Depends(get_product_service)
@@ -137,6 +142,8 @@ async def update_product_admin(product_id: str, payload: ProductCreate, service:
     updated_product = await service.repository.update_product_with_variants(product_id, payload.model_dump())
     if not updated_product:
         raise HTTPException(status_code=404, detail="محصول برای ویرایش یافت نشد")
+    
+    await FastAPICache.clear()
     return updated_product
 
 @router.post(

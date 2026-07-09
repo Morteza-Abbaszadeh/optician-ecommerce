@@ -17,9 +17,15 @@ export default function ProductCard({ product }: ProductCardProps) {
     ? product.variants[0].discount_price || product.variants[0].price 
     : 0;
 
-  // پیدا کردن عکس پیش‌فرض (عکس اولین رنگ)
-  const defaultImage = hasVariants && product.variants[0].images?.[0]?.image_url
+  // ۱. بررسی و ساخت آدرس دقیق عکس برای اتصال به Nginx
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const rawImageUrl = hasVariants && product.variants[0].images?.[0]?.image_url
     ? product.variants[0].images[0].image_url
+    : null;
+
+  // اگر عکس متعلق به خودمان بود، آدرس بک‌اند به آن می‌چسبد. اگر از سورس خارجی بود (مثل Unsplash) همان می‌ماند.
+  const defaultImage = rawImageUrl 
+    ? (rawImageUrl.startsWith("http") ? rawImageUrl : `${backendUrl}${rawImageUrl}`)
     : "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=800&auto=format&fit=crop";
 
   const formatPrice = (price: number) => {
@@ -34,6 +40,8 @@ export default function ProductCard({ product }: ProductCardProps) {
           src={defaultImage}
           alt={product.title}
           fill
+          // ۲. اضافه شدن sizes برای تعیین دقیق حجم دانلود عکس در دستگاه‌های مختلف
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           className="object-cover transition-transform duration-500 group-hover:scale-105"
         />
         

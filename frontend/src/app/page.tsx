@@ -61,6 +61,7 @@ function HeroSection({ data }: { data: any }) {
             src="https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=1000&auto=format&fit=crop" 
             alt="کالکشن زنانه" 
             fill 
+            sizes="(max-width: 768px) 100vw, 50vw"
             className="object-cover transition-transform duration-700 group-hover:scale-105" 
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
@@ -77,6 +78,7 @@ function HeroSection({ data }: { data: any }) {
             src="https://images.unsplash.com/photo-1614715838608-dd527c46231d?q=80&w=1000&auto=format&fit=crop" 
             alt="کالکشن مردانه" 
             fill 
+            sizes="(max-width: 768px) 100vw, 50vw"
             className="object-cover transition-transform duration-700 group-hover:scale-105" 
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
@@ -110,12 +112,14 @@ async function ProductGrid({ data }: { data: any }) {
     return 0
   }
 
+  // 🟢 تنظیم آدرس عکس‌ها برای اتصال به سرور Nginx
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const getImage = (product: any) => {
     try {
       if (product?.variants?.length > 0 && product.variants[0].images?.length > 0 && product.variants[0].images[0].image_url) {
         const imageUrl = product.variants[0].images[0].image_url
         if (typeof imageUrl === 'string' && imageUrl.trim() !== '') {
-          return imageUrl
+          return imageUrl.startsWith('http') ? imageUrl : `${backendUrl}${imageUrl}`
         }
       }
       return "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=800&auto=format&fit=crop"
@@ -141,7 +145,13 @@ async function ProductGrid({ data }: { data: any }) {
               <Link href={`/product/${product.slug}`} key={product.slug} className="group">
                 <div className="bg-white rounded-2xl p-4 border border-zinc-100 shadow-sm transition-all hover:shadow-md hover:border-zinc-200 h-full flex flex-col">
                   <div className="relative h-48 w-full mb-4 bg-zinc-50 rounded-xl overflow-hidden shrink-0">
-                    <Image src={getImage(product)} alt={product.title} fill className="object-cover group-hover:scale-110 transition-transform duration-500" />
+                    <Image 
+                      src={getImage(product)} 
+                      alt={product.title} 
+                      fill 
+                      sizes="(max-width: 768px) 50vw, 25vw"
+                      className="object-cover group-hover:scale-110 transition-transform duration-500" 
+                    />
                   </div>
                   <h4 className="font-bold text-sm text-zinc-800 line-clamp-2 mb-2 flex-grow">{product.title}</h4>
                   <p className="text-emerald-600 font-black text-sm mt-auto">
@@ -172,12 +182,14 @@ async function BrandCollection({ data }: { data: any }) {
     return 0
   }
 
+  // 🟢 تنظیم آدرس عکس‌ها برای اتصال به سرور Nginx
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const getImage = (product: any) => {
     try {
       if (product?.variants?.length > 0 && product.variants[0].images?.length > 0 && product.variants[0].images[0].image_url) {
         const imageUrl = product.variants[0].images[0].image_url
         if (typeof imageUrl === 'string' && imageUrl.trim() !== '') {
-          return imageUrl
+          return imageUrl.startsWith('http') ? imageUrl : `${backendUrl}${imageUrl}`
         }
       }
       return "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=800&auto=format&fit=crop"
@@ -204,7 +216,13 @@ async function BrandCollection({ data }: { data: any }) {
           {products.map((product) => (
             <div key={product.slug} className="min-w-[280px] sm:min-w-[320px] bg-white rounded-3xl p-5 snap-start shrink-0 flex flex-col">
               <div className="relative h-48 bg-zinc-50 rounded-2xl mb-4 overflow-hidden shrink-0">
-                 <Image src={getImage(product)} alt={product.title} fill className="object-cover" />
+                 <Image 
+                   src={getImage(product)} 
+                   alt={product.title} 
+                   fill 
+                   sizes="(max-width: 768px) 100vw, 33vw"
+                   className="object-cover" 
+                 />
               </div>
               <h4 className="font-bold text-zinc-900 mb-2 line-clamp-1">{product.title}</h4>
               <div className="flex justify-between items-center border-t border-zinc-100 pt-4 mt-auto">
@@ -241,7 +259,13 @@ function SocialLocationSection({ data }: { data: any }) {
         </div>
 
         <div className="relative rounded-3xl overflow-hidden h-[400px] group">
-          <Image src="https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1000&auto=format&fit=crop" alt="نقشه فروشگاه" fill className="object-cover opacity-80" />
+          <Image 
+            src="https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1000&auto=format&fit=crop" 
+            alt="نقشه فروشگاه" 
+            fill 
+            sizes="(max-width: 768px) 100vw, 50vw"
+            className="object-cover opacity-80" 
+          />
           <div className="absolute inset-0 bg-zinc-900/60 transition-colors group-hover:bg-zinc-900/50"></div>
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-8 text-center">
             <MapPin className="w-12 h-12 text-red-500 mb-4 animate-bounce" />

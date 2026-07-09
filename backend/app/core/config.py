@@ -24,5 +24,7 @@ class Settings(BaseSettings):
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
+    REDIS_URL: str = "redis://redis:6379/0"
+    
+    
 settings = Settings()

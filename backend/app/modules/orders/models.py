@@ -1,30 +1,27 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Float, ForeignKey, DateTime, Text,  JSON,Enum
+from sqlalchemy import Column, String, Integer, Float, ForeignKey, DateTime, Text, JSON, Enum, Boolean
+from sqlalchemy.dialects.postgresql import UUID  # ایمپورت حیاتی برای دیتابیس
 from sqlalchemy.orm import relationship
 import enum
 from app.core.database import Base
-from sqlalchemy.dialects.postgresql import UUID
-import uuid
-from datetime import datetime
-
 
 # ==========================================
-# وضعیت‌های دقیق سفارش (برای پیگیری مشتری و داشبورد)
+# وضعیت‌های دقیق سفارش
 # ==========================================
 class OrderStatus(str, enum.Enum):
-    PENDING_PAYMENT = "PENDING_PAYMENT"   # در انتظار پرداخت
-    PROCESSING = "PROCESSING"             # در حال پردازش (پرداخت شده)
-    PREPARING = "PREPARING"               # در حال آماده‌سازی (مثلا تراش عدسی)
-    SHIPPED = "SHIPPED"                   # ارسال شده
-    DELIVERED = "DELIVERED"               # تحویل داده شده
-    CANCELLED = "CANCELLED"               # لغو شده
-    RETURNED = "RETURNED"                 # مرجوع شده
+    PENDING_PAYMENT = "PENDING_PAYMENT"
+    PROCESSING = "PROCESSING"
+    PREPARING = "PREPARING"
+    SHIPPED = "SHIPPED"
+    DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
+    RETURNED = "RETURNED"
 
 class PaymentMethod(str, enum.Enum):
-    ONLINE = "ONLINE"                     # درگاه پرداخت اینترنتی
-    BANK_TRANSFER = "BANK_TRANSFER"       # کارت به کارت / واریز به حساب
-    PAY_ON_DELIVERY = "PAY_ON_DELIVERY"   # پرداخت در محل
+    ONLINE = "ONLINE"
+    BANK_TRANSFER = "BANK_TRANSFER"
+    PAY_ON_DELIVERY = "PAY_ON_DELIVERY"
 
 # ==========================================
 # جدول اصلی سفارشات
@@ -33,54 +30,46 @@ class Order(Base):
     __tablename__ = "orders"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)    
-    # 1. اطلاعات مالی (برای نمودارها و حسابداری)
-    total_price = Column(Float, nullable=False) # مجموع قیمت کالاها
-    shipping_cost = Column(Float, default=0.0)  # هزینه ارسال
-    final_price = Column(Float, nullable=False) # مبلغ نهایی پرداختی (با احتساب هزینه ارسال و تخفیف)
     
-    status = Column(Enum(OrderStatus), default=OrderStatus.PENDING_PAYMENT)
+    # 🟢 اصلاح شد: نوع داده دقیقاً به UUID بازگشت
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     
-    # 2. اطلاعات پرداخت (رسیدها و درگاه)
-    payment_method = Column(Enum(PaymentMethod), default=PaymentMethod.ONLINE)
-    transaction_id = Column(String, nullable=True) # شماره تراکنش بانکی (درگاه)
-    receipt_number = Column(String, nullable=True) # شماره رسید (برای کارت به کارت)
-    payment_date = Column(DateTime, nullable=True) # زمان دقیق پرداخت
+    status = Column(Enum(OrderStatus), default=OrderStatus.PENDING_PAYMENT, index=True, nullable=False)
+    payment_method = Column(Enum(PaymentMethod), nullable=True)
     
-    # 3. اطلاعات ارسال (برای پیگیری پست/تیپاکس)
-    shipping_address = Column(Text, nullable=False) # آدرس کامل ثبت شده در زمان خرید
-    shipping_company = Column(String, nullable=True) # پست پیشتاز، تیپاکس، پیک موتوری
-    tracking_code = Column(String, nullable=True) # بارکد پستی برای ارائه به مشتری
-    shipped_at = Column(DateTime, nullable=True) # زمان تحویل به اداره پست
+    total_price = Column(Float, nullable=False)
+    discount_amount = Column(Float, default=0)
+    final_price = Column(Float, nullable=False)
     
-    # 4. یادداشت‌ها
-    admin_note = Column(Text, nullable=True) # یادداشت خصوصی ادمین (مثلا: "مشتری تماس گرفت، فردا ارسال شود")
-    customer_note = Column(Text, nullable=True) # یادداشت مشتری روی سفارش
+    is_paid = Column(Boolean, default=False, index=True)
+    paid_at = Column(DateTime, nullable=True)
     
-    created_at = Column(DateTime, default=datetime.utcnow, index=True) # ایندکس برای سرعت گرفتن نمودارها
+    tracking_code = Column(String, index=True, nullable=True) 
+    shipped_at = Column(DateTime, nullable=True) 
+    
+    admin_note = Column(Text, nullable=True) 
+    customer_note = Column(Text, nullable=True) 
+    
+    created_at = Column(DateTime, default=datetime.utcnow, index=True) 
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # روابط
     user = relationship("User", back_populates="orders")
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
 # ==========================================
-# جدول اقلام سفارش (Snapshot)
+# جدول اقلام سفارش
 # ==========================================
 class OrderItem(Base):
     __tablename__ = "order_items"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    order_id = Column(String, ForeignKey("orders.id"), nullable=False)
-    variant_id = Column(String, ForeignKey("product_variants.id"), nullable=False)
+    order_id = Column(String, ForeignKey("orders.id", ondelete="CASCADE"), index=True, nullable=False)
+    variant_id = Column(String, ForeignKey("product_variants.id", ondelete="SET NULL"), index=True, nullable=True)
     
     quantity = Column(Integer, nullable=False)
+    unit_price = Column(Float, nullable=False)
+    total_price = Column(Float, nullable=False)
     
-    # بسیار مهم: ثبت قیمت در لحظه خرید!
-    # اگر فردا قیمت عینک بالا رفت، تاریخچه خریدهای قبلی نباید تغییر کند.
-    unit_price = Column(Float, nullable=False) 
     prescription = Column(JSON, nullable=True)
     
-    # روابط
     order = relationship("Order", back_populates="items")
-    variant = relationship("ProductVariant")

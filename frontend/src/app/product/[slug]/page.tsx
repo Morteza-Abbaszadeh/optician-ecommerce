@@ -63,7 +63,13 @@ export default function ProductDetailPage() {
 
   const displayPrice = selectedVariant ? (selectedVariant.discount_price || selectedVariant.price) : 0
   const hasDiscount = selectedVariant && selectedVariant.discount_price !== null
-  const currentImage = selectedVariant?.images?.[0]?.image_url || "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=1000&auto=format&fit=crop"
+  
+  // 🟢 تنظیم آدرس عکس‌ها برای اتصال به سرور Nginx و فرمت WebP
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const rawImageUrl = selectedVariant?.images?.[0]?.image_url;
+  const currentImage = rawImageUrl 
+    ? (rawImageUrl.startsWith("http") ? rawImageUrl : `${backendUrl}${rawImageUrl}`)
+    : "https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=1000&auto=format&fit=crop";
 
   // تشخیص نوع محصول برای رندر شرطی
   // فرض می‌کنیم فیلد product_type در بک‌اند به درستی پاس داده می‌شود (مثلا SUNGLASSES, EYEGLASSES, CONTACT_LENSES)
@@ -87,7 +93,14 @@ const handleAddToCart = () => {
           <div className="w-full md:w-1/2">
             <div className="sticky top-24">
               <div className="relative aspect-square w-full rounded-3xl bg-zinc-50 overflow-hidden border border-zinc-100">
-                <Image src={currentImage} alt={product.title} fill className="object-contain p-8 transition-opacity duration-300" priority />
+                <Image 
+                  src={currentImage} 
+                  alt={product.title} 
+                  fill 
+                  sizes="(max-width: 768px) 100vw, 50vw" 
+                  className="object-contain p-8 transition-opacity duration-300" 
+                  priority 
+                />
               </div>
             </div>
           </div>

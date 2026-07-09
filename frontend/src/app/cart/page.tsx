@@ -22,6 +22,13 @@ export default function CartPage() {
     return <div className="min-h-screen bg-zinc-50 flex items-center justify-center" dir="rtl"><div className="animate-pulse flex items-center gap-2"><ShoppingBag className="text-zinc-400" /> در حال بارگذاری سبد خرید...</div></div>
   }
 
+  // 🟢 تابع کمکی برای اصلاح آدرس تصاویر سبد خرید و اتصال به Nginx
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const getImageUrl = (url: string) => {
+    if (!url) return "";
+    return url.startsWith('http') ? url : `${backendUrl}${url}`;
+  };
+
   // حالت سبد خرید خالی
   if (items.length === 0) {
     return (
@@ -65,7 +72,14 @@ export default function CartPage() {
 
                 {/* تصویر کالا */}
                 <Link href={`/product/${item.slug}`} className="relative w-28 h-28 shrink-0 bg-zinc-50 rounded-2xl overflow-hidden border border-zinc-100">
-                  <Image src={item.image} alt={item.title} fill className="object-cover p-2" />
+                  {/* 🟢 اضافه شدن sizes و getImageUrl برای بهینه‌سازی فرمت */}
+                  <Image 
+                    src={getImageUrl(item.image)} 
+                    alt={item.title} 
+                    fill 
+                    sizes="(max-width: 768px) 25vw, 10vw"
+                    className="object-cover p-2" 
+                  />
                 </Link>
 
                 {/* اطلاعات کالا */}

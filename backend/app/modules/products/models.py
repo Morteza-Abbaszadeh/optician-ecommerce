@@ -8,9 +8,11 @@ class Category(Base):
     __tablename__ = "categories"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String, nullable=False) 
+    # نام دسته‌بندی برای جستجوها ایندکس شد
+    name = Column(String, index=True, nullable=False) 
     slug = Column(String, unique=True, index=True, nullable=False)
-    parent_id = Column(String, ForeignKey("categories.id"), nullable=True) 
+    # کلید خارجی برای پیدا کردن سریع زیردسته‌ها ایندکس شد
+    parent_id = Column(String, ForeignKey("categories.id"), index=True, nullable=True) 
     icon_url = Column(String, nullable=True) 
     is_active = Column(Boolean, default=True)
 
@@ -33,24 +35,21 @@ class Product(Base):
     __tablename__ = "products"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    category_id = Column(String, ForeignKey("categories.id"), nullable=False)
-    brand_id = Column(String, ForeignKey("brands.id"), nullable=False)
-    
-    # === فیلدهای کاملاً مشترک برای همه محصولات ===
-    title = Column(String, nullable=False) 
+    # عنوان محصول بیشترین جستجو را در سایت دارد، پس حتماً ایندکس می‌شود
+    title = Column(String, index=True, nullable=False) 
     slug = Column(String, unique=True, index=True, nullable=False)
     description = Column(Text, nullable=True)
-    product_type = Column(String, index=True, nullable=False) # مثلا: GLASSES, LENS, ACCESSORY
     
-    is_prescription_ready = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
+    
+    
+    
+    # کلیدهای خارجی برای فیلتر کردن سریع محصولات بر اساس برند و دسته ایندکس شدند
+    category_id = Column(String, ForeignKey("categories.id"), index=True, nullable=True) 
+    brand_id = Column(String, ForeignKey("brands.id"), index=True, nullable=True) 
+    
+    # فیلترهای نمایش در فروشگاه معمولاً فقط محصولات فعال را می‌گیرند، پس ایندکس می‌شود
+    is_active = Column(Boolean, default=True, index=True) 
     created_at = Column(DateTime, default=datetime.utcnow)
-
-    # === قلب تپنده فروشگاه (JSON) ===
-    # تمام "توضیحات تکمیلی" در این فیلد ذخیره می‌شود.
-    # مثال عینک: {"gender": "مردانه", "frame_material": "فلزی", "lens_width": "62", "bridge": "15"}
-    # مثال عدسی: {"origin_country": "فرانسه", "index": "1.50", "coating": "ضد انعکاس"}
-    specifications = Column(JSON, default=dict)
 
     category = relationship("Category", back_populates="products")
     brand = relationship("Brand", back_populates="products")
@@ -61,7 +60,8 @@ class ProductVariant(Base):
     __tablename__ = "product_variants"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    product_id = Column(String, ForeignKey("products.id"), nullable=False)
+    # کلید خارجی اتصال به محصول ایندکس شد (بسیار مهم برای سرعت لود جزئیات محصول)
+    product_id = Column(String, ForeignKey("products.id"), index=True, nullable=False)
     sku = Column(String, unique=True, index=True, nullable=True) 
     
     # === مقادیر بازرگانی مشترک ===
@@ -81,8 +81,9 @@ class ProductVariant(Base):
 class ProductImage(Base):
     __tablename__ = "product_images"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    variant_id = Column(String, ForeignKey("product_variants.id"), nullable=False)
+    # کلید خارجی تصاویر اتصال به تنوع محصول ایندکس شد
+    variant_id = Column(String, ForeignKey("product_variants.id"), index=True, nullable=False)
     image_url = Column(String, nullable=False)
-    is_primary = Column(Boolean, default=False) 
-    sort_order = Column(Integer, default=0) 
+    is_primary = Column(Boolean, default=False)
+    
     variant = relationship("ProductVariant", back_populates="images")

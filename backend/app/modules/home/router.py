@@ -1,15 +1,18 @@
-from fastapi import APIRouter, Depends , HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
-from app.modules.users.dependencies import get_current_user, get_current_superuser
-
-from pydantic import BaseModel
-from typing import Optional, List
+from typing import List, Optional
 from uuid import UUID
+from pydantic import BaseModel
+
+from app.modules.users.dependencies import get_current_user, get_current_superuser
 from app.core.database import get_db_session
 from app.modules.home.models import HomeSection
 from app.modules.home.schemas import HomeSectionResponse
+
+# ایمپورت‌های مربوط به کش ردیس
+from fastapi_cache.decorator import cache
+from fastapi_cache import FastAPICache
 
 router = APIRouter(prefix="/home", tags=["Home Layout"])
 
@@ -22,14 +25,15 @@ DEFAULT_SECTIONS = [
 ]
 
 @router.get("/layout", response_model=List[HomeSectionResponse])
+@cache(expire=3600)  # کَش کردن چیدمان صفحه اصلی به مدت ۱ ساعت (۳۶۰۰ ثانیه)
 async def get_home_layout(session: AsyncSession = Depends(get_db_session)):
     """دریافت چیدمان داینامیک صفحه اصلی بر اساس ترتیب (Order)"""
     
-    stmt = select(HomeSection).where(HomeSection.is_active == True).order_by(HomeSection.order.asc())
+    stmt = select(HomeSection).where(HomeSection.is_active == True).order_by(HomeSection.order)
     result = await session.execute(stmt)
     sections = list(result.scalars().all())
-
-    # تزریق خودکار دیتای پیش‌فرض در صورت خالی بودن جدول
+    
+    # فرض در صورت خالی بودن جدول
     if not sections:
         for sec_data in DEFAULT_SECTIONS:
             new_sec = HomeSection(**sec_data)
@@ -73,4 +77,8 @@ async def update_section(
         section.product_ids = data.product_ids
         
     await session.commit()
-    return {"message": "با موفقیت به‌روزرسانی شد"}
+    await session.refresh(section)
+    
+    await FastAPICache.clear()
+    
+    return section
