@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/products", tags=["Products"])
 
 @router.get(
-    "/", 
+    "", 
     response_model=List[ProductResponse], 
     summary="دریافت لیست محصولات"
 )
