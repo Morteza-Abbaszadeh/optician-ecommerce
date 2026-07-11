@@ -14,11 +14,30 @@ export const apiClient = axios.create({
   },
 });
 
+// توجه: تابع داخل interceptor حالا از نوع async است تا بتوانیم از await استفاده کنیم
 apiClient.interceptors.request.use(
-  (config) => {
-    // دسترسی به localStorage فقط در سمت کلاینت (مرورگر) مجاز است
-    if (!IS_SERVER) {
+  async (config) => {
+    if (IS_SERVER) {
+      // ۱. سمت سرور (SSR / Server Components)
       try {
+        // ایمپورت داینامیک فقط در زمان اجرا روی سرور انجام می‌شود
+        const { cookies } = await import("next/headers");
+        const cookieStore = await cookies();
+        // خواندن کوکیِ ذخیره شده در قدم قبلی
+        const token = cookieStore.get("auth_token")?.value;
+        
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (error) {
+        // این خطا در زمان Static Build نکس‌جی‌اس طبیعی است و نباید مشکلی ایجاد کند
+        console.warn("عدم دسترسی به کوکی در این مرحله از رندر سرور.");
+      }
+    } else {
+      // ۲. سمت کلاینت (Browser Requests)
+      try {
+        // در سمت کلاینت همان روال قبلی شما (خواندن از zustand persist) را نگه می‌داریم 
+        // چون سریع‌تر از خواندن کوکی با جاوااسکریپت است و نیازی به تغییر اضافی ندارد
         const authStorage = localStorage.getItem("auth-storage");
         if (authStorage) {
           const parsedData = JSON.parse(authStorage);
@@ -32,6 +51,7 @@ apiClient.interceptors.request.use(
         console.error("خطا در خواندن توکن از localStorage:", error);
       }
     }
+    
     return config;
   },
   (error) => {

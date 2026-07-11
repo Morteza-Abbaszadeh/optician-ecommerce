@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import { apiClient } from "@/services/apiClient" // در قدم‌های قبلی فایل کلاینت شبکه را در lib اصلاح کردیم
+import { apiClient } from "@/services/apiClient" 
 
 interface User {
   id: string
@@ -34,6 +34,12 @@ export const useAuthStore = create<AuthState>()(
         set({ token, isAuthenticated: !!token })
         if (token) {
           apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`
+          
+          // اضافه شده: ذخیره توکن در کوکی مرورگر برای دسترسی در سمت سرور (SSR)
+          // انقضا روی ۷ روز تنظیم شده است (برابر با تنظیمات بک‌اند شما)
+          if (typeof document !== 'undefined') {
+            document.cookie = `auth_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax; Secure`;
+          }
         }
       },
       
@@ -58,7 +64,11 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         set({ token: null, user: null, isAuthenticated: false })
         delete apiClient.defaults.headers.common['Authorization']
-        // نیازی به پاک کردن دستی localStorage نیست، پلاگین persist مقادیر null را ذخیره می‌کند
+        
+        // اضافه شده: پاک کردن کوکی توکن هنگام خروج از حساب
+        if (typeof document !== 'undefined') {
+          document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        }
       },
       
       setHydrated: () => set({ isHydrated: true }),
