@@ -30,31 +30,29 @@ class Brand(Base):
     is_active = Column(Boolean, default=True)
 
     products = relationship("Product", back_populates="brand")
-
 class Product(Base):
     __tablename__ = "products"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    # عنوان محصول بیشترین جستجو را در سایت دارد، پس حتماً ایندکس می‌شود
     title = Column(String, index=True, nullable=False) 
     slug = Column(String, unique=True, index=True, nullable=False)
     description = Column(Text, nullable=True)
     
+    # === ستون‌های جدید که در Schema بود اما در Model نبود ===
+    product_type = Column(String, nullable=False, default="GLASSES") 
+    is_prescription_ready = Column(Boolean, default=False)
+    specifications = Column(JSON, default=dict) 
+    # =========================================================
     
-    
-    
-    # کلیدهای خارجی برای فیلتر کردن سریع محصولات بر اساس برند و دسته ایندکس شدند
     category_id = Column(String, ForeignKey("categories.id"), index=True, nullable=True) 
     brand_id = Column(String, ForeignKey("brands.id"), index=True, nullable=True) 
     
-    # فیلترهای نمایش در فروشگاه معمولاً فقط محصولات فعال را می‌گیرند، پس ایندکس می‌شود
     is_active = Column(Boolean, default=True, index=True) 
     created_at = Column(DateTime, default=datetime.utcnow)
 
     category = relationship("Category", back_populates="products")
     brand = relationship("Brand", back_populates="products")
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan")
-
 class ProductVariant(Base):
     """جدول قیمت‌گذاری، موجودی و ویژگی‌های انتخابی کاربر"""
     __tablename__ = "product_variants"
@@ -81,9 +79,9 @@ class ProductVariant(Base):
 class ProductImage(Base):
     __tablename__ = "product_images"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    # کلید خارجی تصاویر اتصال به تنوع محصول ایندکس شد
     variant_id = Column(String, ForeignKey("product_variants.id"), index=True, nullable=False)
     image_url = Column(String, nullable=False)
     is_primary = Column(Boolean, default=False)
+    sort_order = Column(Integer, default=0) # <--- اضافه شدن سورت اوردر
     
     variant = relationship("ProductVariant", back_populates="images")
