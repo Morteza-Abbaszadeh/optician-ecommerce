@@ -1,19 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
-from app.modules.products.schemas import ProductResponse
-from app.modules.products.services import ProductService
-from app.modules.products.dependencies import get_product_service
-from app.modules.users.dependencies import get_current_superuser # مسیر این ایمپورت را با توجه به پروژه خود چک کنید
-from app.modules.products.schemas import ProductCreate
-from app.modules.products.schemas import CategoryCreate, CategoryResponse, BrandCreate, BrandResponse
-from app.modules.products.models import Product
+import logging
 import os
 import uuid
-from fastapi import UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from typing import List
+
+from app.modules.products.schemas import (
+    ProductResponse, ProductCreate, 
+    CategoryCreate, CategoryResponse, 
+    BrandCreate, BrandResponse
+)
+from app.modules.products.services import ProductService
+from app.modules.products.dependencies import get_product_service
+from app.modules.users.dependencies import get_current_superuser 
+from app.modules.products.models import Product
+
 from fastapi_cache.decorator import cache
 from fastapi_cache import FastAPICache
 
-
+# تعریف لاگر اختصاصی برای این فایل
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -28,11 +33,12 @@ async def get_products(
     offset: int = 0,
     service: ProductService = Depends(get_product_service)
 ):
-    """
-    دریافت لیست محصولات فعال برای صفحه اصلی فروشگاه.
-    این مسیر دارای صفحه بندی (limit و offset) است.
-    """
-    return await service.get_all_products(limit=limit, offset=offset)
+    """دریافت لیست محصولات فعال برای صفحه اصلی فروشگاه."""
+    try:
+        return await service.get_all_products(limit=limit, offset=offset)
+    except Exception as e:
+        logger.error(f"خطا در دریافت لیست محصولات: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="خطا در دریافت لیست محصولات")
 
 @router.get(
     "/{slug}", 
@@ -44,60 +50,79 @@ async def get_product(
     slug: str,
     service: ProductService = Depends(get_product_service)
 ):
-    """
-    دریافت اطلاعات کامل یک محصول با استفاده از اسلاگ (نام لاتین در آدرس URL).
-    این اطلاعات شامل برند، دسته بندی و تنوع رنگ و سایز است.
-    """
-    product = await service.get_product_by_slug(slug)
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="محصول مورد نظر یافت نشد"
-        )
-    return product
+    """دریافت اطلاعات کامل یک محصول با استفاده از اسلاگ"""
+    try:
+        product = await service.get_product_by_slug(slug)
+        if not product:
+            logger.warning(f"تلاش برای مشاهده محصول ناموجود با اسلاگ: {slug}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="محصول مورد نظر یافت نشد"
+            )
+        return product
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطا در دریافت جزئیات محصول {slug}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="خطای سرور در دریافت جزئیات محصول")
 
 @router.post(
     "/admin/", 
     response_model=ProductResponse, 
     status_code=status.HTTP_201_CREATED,
     summary="افزودن محصول جدید (ویژه ادمین)",
-    dependencies=[Depends(get_current_superuser)] # 👈 قفل امنیتی ادمین
+    dependencies=[Depends(get_current_superuser)]
 )
 async def create_product_admin(
     payload: ProductCreate,
     service: ProductService = Depends(get_product_service)
 ):
-    """
-    ثبت یک عینک جدید در سیستم.
-    این مسیر می‌تواند محصول، تنوع‌های رنگ و سایز، و تصاویر را به صورت یکجا دریافت و ذخیره کند.
-    """
-    # فراخوانی سرویس برای ساخت محصول
-    # (باید این متد را در services.py خود ساخته باشید که مستقیماً تابع ریپازیتوری ما را صدا بزند)
-    new_product = await service.create_product(payload)
-    return new_product
-
+    """ثبت یک عینک جدید در سیستم."""
+    try:
+        new_product = await service.create_product(payload)
+        logger.info(f"محصول جدید با عنوان '{payload.title}' توسط ادمین با موفقیت ثبت شد.")
+        return new_product
+    except Exception as e:
+        logger.error(f"خطای بحرانی در ثبت محصول جدید '{payload.title}': {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="خطا در ثبت محصول جدید")
 
 # ==========================================
 # روترهای دسته‌بندی (Categories)
 # ==========================================
 @router.get("/categories/", response_model=List[CategoryResponse], summary="دریافت لیست دسته‌ها")
+@cache(expire=86400)
 async def get_categories(service: ProductService = Depends(get_product_service)):
     return await service.repository.get_all_categories()
 
 @router.post("/categories/admin/", response_model=CategoryResponse, dependencies=[Depends(get_current_superuser)])
 async def create_category(payload: CategoryCreate, service: ProductService = Depends(get_product_service)):
-    return await service.repository.create_category(payload.model_dump())
+    try:
+        new_cat = await service.repository.create_category(payload.model_dump())
+        logger.info(f"دسته‌بندی جدید '{payload.name}' ثبت شد.")
+        await FastAPICache.clear()
+        return new_cat
+    except Exception as e:
+        logger.error(f"خطا در ایجاد دسته‌بندی '{payload.name}': {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="خطا در ثبت دسته‌بندی")
 
 # ==========================================
 # روترهای برندها (Brands)
 # ==========================================
 @router.get("/brands/", response_model=List[BrandResponse], summary="دریافت لیست برندها")
+@cache(expire=86400)
 async def get_brands(service: ProductService = Depends(get_product_service)):
     return await service.repository.get_all_brands()
 
 @router.post("/brands/admin/", response_model=BrandResponse, dependencies=[Depends(get_current_superuser)])
 async def create_brand(payload: BrandCreate, service: ProductService = Depends(get_product_service)):
-    return await service.repository.create_brand(payload.model_dump())
+    try:
+        new_brand = await service.repository.create_brand(payload.model_dump())
+        logger.info(f"برند جدید '{payload.name}' ثبت شد.")
+        await FastAPICache.clear()
+        return new_brand
+    except Exception as e:
+        logger.error(f"خطا در ایجاد برند '{payload.name}': {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="خطا در ثبت برند")
 
 @router.delete(
     "/admin/{product_id}", 
@@ -109,10 +134,14 @@ async def delete_product_admin(
     product_id: str, 
     service: ProductService = Depends(get_product_service)
 ):
-    """
-    حذف نرم محصول. محصول از دیتابیس پاک نمی‌شود بلکه وضعیت is_active آن False می‌شود.
-    """
-    return await service.deactivate_product(product_id)
+    """حذف نرم محصول."""
+    try:
+        result = await service.deactivate_product(product_id)
+        logger.info(f"محصول با آیدی {product_id} غیرفعال (حذف نرم) شد.")
+        return result
+    except Exception as e:
+        logger.error(f"خطا در غیرفعال‌سازی محصول {product_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="خطا در حذف محصول")
 
 @router.get("/admin/all", response_model=List[ProductResponse], dependencies=[Depends(get_current_superuser)])
 async def get_all_products_admin(limit: int = 50, offset: int = 0, service: ProductService = Depends(get_product_service)):
@@ -125,26 +154,49 @@ async def get_all_products_admin(limit: int = 50, offset: int = 0, service: Prod
     dependencies=[Depends(get_current_superuser)]
 )
 async def get_product_by_id_admin(product_id: str, service: ProductService = Depends(get_product_service)):
-    product = await service.repository.get_product_by_id(product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="محصول یافت نشد")
-    return product
+    try:
+        product = await service.repository.get_product_by_id(product_id)
+        if not product:
+            logger.warning(f"جستجوی ادمین برای محصول ناموجود با آیدی: {product_id}")
+            raise HTTPException(status_code=404, detail="محصول یافت نشد")
+        return product
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطا در دریافت محصول {product_id} برای ادمین: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="خطا در دریافت اطلاعات محصول")
+
 @router.patch("/admin/{product_id}/restore", dependencies=[Depends(get_current_superuser)])
 async def restore_product_admin(product_id: str, service: ProductService = Depends(get_product_service)):
     """بازگردانی محصول حذف شده"""
-    return await service.restore_product(product_id)
+    try:
+        result = await service.restore_product(product_id)
+        logger.info(f"محصول {product_id} با موفقیت بازگردانی (فعال) شد.")
+        return result
+    except Exception as e:
+        logger.error(f"خطا در بازگردانی محصول {product_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="خطا در بازگردانی محصول")
+
 @router.put(
     "/admin/{product_id}", 
     response_model=ProductResponse, 
     dependencies=[Depends(get_current_superuser)]
 )
 async def update_product_admin(product_id: str, payload: ProductCreate, service: ProductService = Depends(get_product_service)):
-    updated_product = await service.repository.update_product_with_variants(product_id, payload.model_dump())
-    if not updated_product:
-        raise HTTPException(status_code=404, detail="محصول برای ویرایش یافت نشد")
-    
-    await FastAPICache.clear()
-    return updated_product
+    try:
+        updated_product = await service.repository.update_product_with_variants(product_id, payload.model_dump())
+        if not updated_product:
+            logger.warning(f"تلاش ادمین برای آپدیت محصولی که وجود ندارد (آیدی: {product_id})")
+            raise HTTPException(status_code=404, detail="محصول برای ویرایش یافت نشد")
+        
+        await FastAPICache.clear()
+        logger.info(f"محصول {product_id} با موفقیت توسط ادمین ویرایش شد.")
+        return updated_product
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطای سرور در ویرایش محصول {product_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="خطا در بروزرسانی محصول")
 
 @router.post(
     "/admin/upload-image", 
@@ -152,24 +204,22 @@ async def update_product_admin(product_id: str, payload: ProductCreate, service:
     dependencies=[Depends(get_current_superuser)]
 )
 async def upload_product_image(file: UploadFile = File(...)):
-    """
-    دریافت فایل عکس از ادمین، ذخیره در سرور و بازگرداندن URL نهایی
-    """
-    # ۱. استخراج فرمت فایل (مثلا jpg یا png)
-    file_extension = file.filename.split(".")[-1]
-    
-    # ۲. ساخت یک نام رندوم و یکتا برای عکس تا نام‌ها تداخل پیدا نکنند
-    new_filename = f"{uuid.uuid4()}.{file_extension}"
-    
-    # ۳. مسیر ذخیره‌سازی فایل در سرور
-    file_path = os.path.join("static/uploads/products", new_filename)
-    
-    # ۴. ذخیره فیزیکی فایل روی هارد سرور
-    with open(file_path, "wb") as buffer:
-        buffer.write(await file.read())
+    """دریافت فایل عکس از ادمین، ذخیره در سرور و بازگرداندن URL نهایی"""
+    try:
+        file_extension = file.filename.split(".")[-1]
+        new_filename = f"{uuid.uuid4()}.{file_extension}"
+        file_path = os.path.join("static/uploads/products", new_filename)
         
-    # ۵. تولید URL نهایی برای ذخیره در دیتابیس
-    # دقت کنید که در حالت واقعی به جای localhost نام دامنه شما قرار می‌گیرد
-    image_url = f"http://localhost:8000/static/uploads/products/{new_filename}"
-    
-    return {"image_url": image_url}
+        # ذخیره فیزیکی فایل روی هارد سرور
+        with open(file_path, "wb") as buffer:
+            buffer.write(await file.read())
+            
+        image_url = f"http://localhost:8000/static/uploads/products/{new_filename}"
+        
+        logger.info(f"یک عکس محصول جدید با موفقیت در سرور آپلود شد: {new_filename}")
+        return {"image_url": image_url}
+        
+    except Exception as e:
+        # اگر موقع ذخیره فایل روی هارد (Permission Denied, Disk Full) خطایی رخ دهد، اینجا شکار می‌شود
+        logger.error(f"خطای بحرانی در زمان آپلود و ذخیره عکس محصول روی سرور: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="خطای سرور در آپلود تصویر")

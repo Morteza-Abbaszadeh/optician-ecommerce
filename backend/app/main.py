@@ -6,7 +6,7 @@ from app.modules.orders.router import router as orders_router
 from app.modules.home.router import router as home_router
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings 
-
+from app.core.logging_config import setup_logging
 import os
 
 from contextlib import asynccontextmanager
@@ -15,7 +15,7 @@ from fastapi_cache.backends.redis import RedisBackend
 from redis import asyncio as aioredis
 
 
-
+setup_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # اتصال به سرور ردیس
